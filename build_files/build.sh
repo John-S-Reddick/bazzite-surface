@@ -5,23 +5,37 @@ set -ouex pipefail
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
 
-### Install packages
+### Surface Pro 9 touchscreen + pen driver (built in the ithc stage of the Containerfile)
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+KVER="$(rpm -q kernel-core --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')"
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+if [[ "$(cat /ithc/kver)" != "${KVER}" ]]; then
+    echo "ithc was built for $(cat /ithc/kver) but the image kernel is ${KVER}" >&2
+    exit 1
+fi
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+install -D -m 0644 /ithc/ithc.ko "/usr/lib/modules/${KVER}/extra/ithc/ithc.ko"
+depmod -a "${KVER}"
+modinfo -k "${KVER}" ithc
 
-#### Example for enabling a System Unit File
+### iptsd - turns raw touch/pen data from ithc into multitouch and stylus input
 
-systemctl enable podman.socket
+# linux-surface has not published a Fedora 44 repo, so pin to their Fedora 43 one.
+# iptsd's library dependencies (fmt 11, spdlog 1.15, inih) are the same on 44.
+cat > /etc/yum.repos.d/linux-surface.repo <<'EOF'
+[linux-surface]
+name=linux-surface
+baseurl=https://pkg.surfacelinux.com/fedora/f43/
+enabled=1
+gpgkey=https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc
+gpgcheck=1
+repo_gpgcheck=0
+EOF
+
+dnf5 install -y iptsd
+
+# Keep the repo out of the final image so nothing on the Surface tracks it
+rm -f /etc/yum.repos.d/linux-surface.repo
+
+# iptsd is started per-device by its udev rule (50-iptsd.rules), so there is no unit to enable
+test -f /usr/lib/udev/rules.d/50-iptsd.rules

@@ -69,7 +69,13 @@ jobs:
       # This actually builds the container image
       - name: Build Image
         id: build-image
+        env:
+          MOK_KEY: ${{ secrets.MOK_KEY }}
         run: |
+          if [[ -n "${MOK_KEY}" ]]; then
+            export MOK_KEY_FILE="${RUNNER_TEMP}/mok_key.pem"
+            (umask 077 && printf '%s\n' "${MOK_KEY}" > "${MOK_KEY_FILE}")
+          fi
           just build \
             ${IMAGE_NAME} \
             ${DEFAULT_TAG}

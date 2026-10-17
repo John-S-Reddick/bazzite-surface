@@ -99,6 +99,10 @@ build $target_image=image_name $tag=default_tag:
     set -euox pipefail
 
     BUILD_ARGS=()
+    # Key (PEM, private key + cert) used to sign the ithc module for Secure Boot
+    if [[ -s "${MOK_KEY_FILE:-}" ]]; then
+        BUILD_ARGS+=("--secret" "id=mok_key,src=${MOK_KEY_FILE}")
+    fi
     LABELS=()
     if [[ -z "$(git status -s)" ]]; then
         GIT_SHA=$(git rev-parse --short HEAD)
